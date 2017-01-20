@@ -17,6 +17,9 @@ ADD docker_files/docker_start.sh /docker_start.sh
 RUN mkdir -p ${APP_DIR}
 WORKDIR ${APP_DIR}
 
+# clickhouse config with cluster def
+COPY /clickhouse_files/config.xml /etc/clickhouse-server/
+
 COPY /target/pack/lib/clickhouse* ${APP_DIR}/lib/
 COPY /target/pack/lib/guava* ${APP_DIR}/lib/
 COPY Makefile ${APP_DIR}

@@ -25,7 +25,7 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     val client = ClickhouseClient(clusterNameO)(ds)
     clusterNameO match {
       case None => client.createDb(dbName)
-      case Some(x) => client.createDb(dbName)
+      case Some(x) => client.createDbCluster(dbName)
     }
   }
 
@@ -35,30 +35,50 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     val sqlStmt = createClickhouseTableDefinitionSQL(dbName, tableName, partitionColumnName, indexColumns)
     clusterNameO match {
       case None => client.query(sqlStmt)
-      case Some(x) => client.queryCluster(sqlStmt)
+      case Some(clusterName) =>
+        // create local table on every node
+        client.queryCluster(sqlStmt)
+        // create distrib table (view) on every node
+        val sqlStmt2 = s"CREATE TABLE IF NOT EXISTS ${dbName}.${tableName}_all AS ${dbName}.${tableName} ENGINE = Distributed($clusterName, $dbName, $tableName, rand());"
+        client.queryCluster(sqlStmt2)
     }
   }
 
-  def saveToClickhouse(dbName: String, tableName: String, partitionFunc: (org.apache.spark.sql.Row) => java.sql.Date, partitionColumnName: String = "mock_date")
+  def saveToClickhouse(dbName: String, tableName: String, partitionFunc: (org.apache.spark.sql.Row) => java.sql.Date, partitionColumnName: String = "mock_date", clusterNameO: Option[String] = None)
                       (implicit ds: ClickHouseDataSource)={
-    val host = ds.getHost
-    val port = ds.getPort
+    val defaultHost = ds.getHost
+    val defaultPort = ds.getPort
+
+    val (clusterTableName, clickHouseHosts) = clusterNameO match {
+      case Some(clusterName) =>
+        // get nodes from cluster
+        val client = ClickhouseClient(clusterNameO)(ds)
+        (s"${tableName}_all", client.getClusterNodes())
+      case None =>
+        (tableName, Seq(defaultHost))
+    }
+
     val schema = df.schema
 
     // following code is going to be run on executors
     val insertResults = df.rdd.mapPartitions((partition: Iterator[org.apache.spark.sql.Row])=>{
 
-      val nodeDs = ClickhouseConnectionFactory.get(host, port)
+      val rnd = scala.util.Random.nextInt(clickHouseHosts.length)
+      val targetHost = clickHouseHosts(rnd)
+      val targetHostDs = ClickhouseConnectionFactory.get(targetHost, defaultPort)
 
       // explicit closing
-      using(nodeDs.getConnection) { conn =>
-        val insertStatementSql = generateInsertStatment(schema, dbName, tableName, partitionColumnName)
+      using(targetHostDs.getConnection) { conn =>
+        val insertStatementSql = generateInsertStatment(schema, dbName, clusterTableName, partitionColumnName)
         val statement = conn.prepareStatement(insertStatementSql)
 
+        // spark partition -> insert batch
         partition.foreach{ row =>
+
           // create mock date
           val partitionVal = partitionFunc(row)
           statement.setDate(1, partitionVal)
+
           // map fields
           schema.foreach{ f =>
             val fieldName = f.name
@@ -71,19 +91,19 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
               statement.setObject(fieldIdx + 2, defVal)
             }
           }
-
           statement.addBatch()
         }
-
         val r = statement.executeBatch()
 
         // return: Seq((host, insertCount))
-        List(r.sum).toIterator
+        List((targetHost, r.sum)).toIterator
       }
 
     }).collect()
 
-    insertResults.sum
+    // aggr insert results by hosts
+    insertResults.groupBy(_._1)
+      .map(x => (x._1, x._2.map(_._2).sum))
   }
 
   private def generateInsertStatment(schema: org.apache.spark.sql.types.StructType, dbName: String, tableName: String, partitionColumnName: String) = {

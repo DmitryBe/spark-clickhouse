@@ -37,3 +37,6 @@ dev-local:
 	mkdir -p target/l
 	cp -f target/pack/lib/clickhouse* target/l/
 	cp -f target/pack/lib/guava* target/l/
+
+clickhouse-server-start:
+	docker run -it -d --name clickhouse-server -p 8123:8123 -v `pwd`/clickhouse_files/config.xml:/etc/clickhouse-server/config.xml yandex/clickhouse-server

@@ -1,7 +1,6 @@
 package io.clickhouse.ext
 
 import java.util.Properties
-
 import ru.yandex.clickhouse.ClickHouseDataSource
 import ru.yandex.clickhouse.settings.ClickHouseProperties
 

@@ -43,8 +43,8 @@ case class ClickhouseClient(clusterNameO: Option[String] = None)
     val clusterName = isClusterNameProvided()
     using(ds.getConnection) { conn =>
       val statement = conn.createStatement()
-      val rs = statement.executeQuery(s"select host_address from system.clusters where cluster == '$clusterName'")
-      val r = rs.map(x => x.getString("host_address"))
+      val rs = statement.executeQuery(s"select host_name, host_address from system.clusters where cluster == '$clusterName'")
+      val r = rs.map(x => x.getString("host_name"))
       require(r.nonEmpty, s"cluster $clusterNameO not found")
       r
     }
