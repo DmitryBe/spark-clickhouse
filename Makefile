@@ -4,7 +4,7 @@ REPO=dmitryb/clickhouse-spark-connector
 TAG=0.0.1
 
 build:
-	sbt clean compile
+	sbt compile
 	sbt pack
 
 pack:

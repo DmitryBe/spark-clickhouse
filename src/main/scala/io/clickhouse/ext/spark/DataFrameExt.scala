@@ -44,8 +44,9 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
     }
   }
 
-  def saveToClickhouse(dbName: String, tableName: String, partitionFunc: (org.apache.spark.sql.Row) => java.sql.Date, partitionColumnName: String = "mock_date", clusterNameO: Option[String] = None)
+  def saveToClickhouse(dbName: String, tableName: String, partitionFunc: (org.apache.spark.sql.Row) => java.sql.Date, partitionColumnName: String = "mock_date", clusterNameO: Option[String] = None, batchSize: Int = 100000)
                       (implicit ds: ClickHouseDataSource)={
+
     val defaultHost = ds.getHost
     val defaultPort = ds.getPort
 
@@ -69,11 +70,17 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
 
       // explicit closing
       using(targetHostDs.getConnection) { conn =>
+
         val insertStatementSql = generateInsertStatment(schema, dbName, clusterTableName, partitionColumnName)
         val statement = conn.prepareStatement(insertStatementSql)
 
-        // spark partition -> insert batch
-        partition.foreach{ row =>
+        var totalInsert = 0
+        var counter = 0
+
+        while(partition.hasNext){
+
+          counter += 1
+          val row = partition.next()
 
           // create mock date
           val partitionVal = partitionFunc(row)
@@ -92,11 +99,23 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
             }
           }
           statement.addBatch()
+
+          if(counter >= batchSize){
+            val r = statement.executeBatch()
+            totalInsert += r.sum
+            counter = 0
+          }
+
+        } // end: while
+
+        if(counter > 0) {
+          val r = statement.executeBatch()
+          totalInsert += r.sum
+          counter = 0
         }
-        val r = statement.executeBatch()
 
         // return: Seq((host, insertCount))
-        List((targetHost, r.sum)).toIterator
+        List((targetHost, totalInsert)).toIterator
       }
 
     }).collect()

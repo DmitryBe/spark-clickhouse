@@ -7,6 +7,55 @@ import org.apache.spark.sql.SparkSession
 case class Row1(name: String, v: Int, v2: Int)
 
 class TestSpec extends FlatSpec with Matchers {
+
+  "case0" should "" in {
+
+    val max = 25e6
+    val monthSize = max / 11
+    val daySize = monthSize / 28
+
+    def yearMap(chrom: String) = {
+      1900 + (math.abs(chrom.hashCode) % 200)
+    }
+
+    def monthDayMap(pos: Int) = {
+      val m = (pos / monthSize).toInt
+      val d = ((pos % monthSize) / daySize).toInt
+      (m + 1, d + 1)
+    }
+
+    val r = (5024637 to 48119824).toList map { pos =>
+      monthDayMap(pos)
+    }
+
+    val month_range = r.map(_._1).distinct
+    val day_range = r.map(_._2).distinct
+
+    assert(true)
+  }
+
+  "case 11" should "" in {
+
+    val a = 1
+
+    def calc(pos: Int) = {
+      val x = pos / 25e6 * 348
+      val m = x % 12
+      val d = x % 29
+      (m.toInt, d.toInt)
+    }
+
+    val r = (0 to 1000000).toList map { pos =>
+      calc(pos)
+    }
+
+    val month_range = r.map(_._1).distinct
+    val day_range = r.map(_._2).distinct
+
+
+    assert(true)
+  }
+
   "case1" should "ok" in {
 
     val sparkSession = SparkSession.builder
