@@ -133,6 +133,7 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
 
   private def defaultNullValue(sparkType: org.apache.spark.sql.types.DataType, v: Any) = sparkType match {
     case DoubleType => 0
+    case LongType => 0
     case FloatType => 0
     case IntegerType => 0
     case StringType => null
@@ -159,6 +160,7 @@ case class DataFrameExt(df: org.apache.spark.sql.DataFrame) extends Serializable
   }
 
   private def sparkType2ClickhouseType(sparkType: org.apache.spark.sql.types.DataType)= sparkType match {
+    case LongType => "Int64"
     case DoubleType => "Float64"
     case FloatType => "Float32"
     case IntegerType => "Int32"
